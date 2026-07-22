@@ -551,6 +551,7 @@ const MID_TICKER = [
   <!-- ═══════════ CTA FINAL ═══════════ -->
   <section class="final-sec" id="contacto">
     <div class="container final-inner reveal">
+      <img class="final-logo" :src="IMG + 'Logo.png'" alt="Uribe's Pizza" />
       <span class="marker">¿ya se te antojó?</span>
       <h2>Pide ahora y<br>disfruta en casa</h2>
       <p>Mándanos WhatsApp o llámanos al <b>333 599 2647</b> — llevamos el sabor hasta tu puerta.</p>
@@ -694,7 +695,7 @@ const MID_TICKER = [
   --font-brush:'Permanent Marker',cursive;
   --font-body:'Inter',sans-serif;
   --shadow-card:0 18px 40px -16px rgba(20,20,22,.35);
-  --nav-h:74px;
+  --nav-h:86px;
   --rough:255px 18px 225px 18px / 18px 225px 18px 255px;
   --rough-2:18px 225px 18px 255px / 255px 18px 225px 18px;
 }
@@ -746,10 +747,11 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .nav-inner{width:min(1200px,94%);margin-inline:auto;display:flex;align-items:center;justify-content:space-between;gap:14px}
 .brand{display:flex;align-items:center;gap:12px;min-width:0}
 .brand-logo{
-  width:56px;height:56px;flex-shrink:0;
+  width:74px;height:74px;flex-shrink:0;
   object-fit:contain;display:block;
   filter:drop-shadow(2px 2px 0 rgba(20,20,22,.22));
 }
+.footer-brand .brand-logo{width:96px;height:96px}
 .brand-text{line-height:1.05}
 .brand-name{font-family:var(--font-poster);font-size:1.3rem;letter-spacing:.02em}
 .brand-name em{font-style:normal;color:var(--red)}
@@ -1293,6 +1295,13 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
   border-radius:var(--rough-2);transform:rotate(-14deg);
 }
 .final-inner{position:relative;z-index:2}
+.final-logo{
+  width:150px;height:auto;
+  margin:0 auto 6px;
+  filter:drop-shadow(0 10px 16px rgba(0,0,0,.4));
+  animation:floaty-logo 4.5s ease-in-out infinite;
+}
+@keyframes floaty-logo{0%,100%{transform:translateY(0) rotate(-1.5deg)}50%{transform:translateY(-9px) rotate(1.5deg)}}
 .final-sec .marker{font-size:1.3rem;color:var(--gold);display:inline-block;transform:rotate(-2deg);margin-bottom:14px}
 .final-sec h2{
   font-family:var(--font-poster);text-transform:uppercase;
