@@ -77,15 +77,15 @@ const PIZZAS = [
 ]
 
 const SNACKS = [
-  { name: 'Alitas',            price: 85, note: 'BBQ · Búfalo · Mango habanero' },
-  { name: 'Nuggets',           price: 65 },
-  { name: 'Aros de cebolla',   price: 65 },
-  { name: 'Hamburguesa',       price: 75 },
-  { name: 'Papas gajo',        price: 50 },
-  { name: 'Papas a la francesa', price: 45 },
-  { name: 'Canelasos',         price: 65 },
-  { name: 'Pan de ajo',        price: 65 },
-  { name: 'Hot dog',           price: 30 }
+  { name: 'Alitas',            price: 85, note: 'BBQ · Búfalo · Mango habanero', icon: '🍗' },
+  { name: 'Nuggets',           price: 65, icon: '🧆' },
+  { name: 'Aros de cebolla',   price: 65, icon: '🧅' },
+  { name: 'Hamburguesa',       price: 75, icon: '🍔' },
+  { name: 'Papas gajo',        price: 50, icon: '🥔' },
+  { name: 'Papas a la francesa', price: 45, icon: '🍟' },
+  { name: 'Canelasos',         price: 65, icon: '🍩' },
+  { name: 'Pan de ajo',        price: 65, icon: '🥖' },
+  { name: 'Hot dog',           price: 30, icon: '🌭' }
 ]
 
 // Especialidades ya armadas · extra = costo adicional sobre el precio de la pizza
@@ -151,15 +151,19 @@ function pulse (msg) {
 function addCombo (id) {
   const c = COMBOS.find(x => x.id === id)
   const ex = cartLines.find(l => l.kind === 'combo' && l.ref === id)
-  if (ex) ex.qty++
-  else cartLines.push({ key: ++lineSeq, kind: 'combo', ref: id, name: c.name, price: c.price, img: c.img, qty: 1 })
+  let key
+  if (ex) { ex.qty++; key = ex.key }
+  else { key = ++lineSeq; cartLines.push({ key, kind: 'combo', ref: id, name: c.name, price: c.price, img: c.img, qty: 1 }) }
   pulse(`✔ ${c.name} agregado`)
+  scrollToCartLine(key)
 }
 function addSnack (s) {
   const ex = cartLines.find(l => l.kind === 'snack' && l.ref === s.name)
-  if (ex) ex.qty++
-  else cartLines.push({ key: ++lineSeq, kind: 'snack', ref: s.name, name: s.name, price: s.price, qty: 1 })
+  let key
+  if (ex) { ex.qty++; key = ex.key }
+  else { key = ++lineSeq; cartLines.push({ key, kind: 'snack', ref: s.name, name: s.name, price: s.price, icon: s.icon || '🍽️', qty: 1 }) }
   pulse(`✔ ${s.name} agregado`)
+  scrollToCartLine(key)
 }
 function changeQty (key, op) {
   const i = cartLines.findIndex(l => l.key === key)
@@ -193,10 +197,12 @@ function confirmPizza () {
   const name = spec ? `Pizza ${spec.name}` : 'Pizza a tu gusto'
   const sig = [name, pizzaModal.size, pizzaModal.orilla, [...pizzaModal.ings].sort().join('|')].join('·')
   const ex = cartLines.find(l => l.kind === 'pizza' && l.sig === sig)
-  if (ex) ex.qty++
+  let key
+  if (ex) { ex.qty++; key = ex.key }
   else {
+    key = ++lineSeq
     cartLines.push({
-      key: ++lineSeq, kind: 'pizza', sig, name,
+      key, kind: 'pizza', sig, name,
       size: pizzaModal.size, orilla: pizzaModal.orilla,
       ings: [...pizzaModal.ings],
       specExtra: spec?.extra || 0,
@@ -207,6 +213,7 @@ function confirmPizza () {
   pulse(`✔ ${name} (${pizzaModal.size}) agregada`)
   closePizzaModal()
   openCart()
+  scrollToCartLine(key)
 }
 
 /* ══════════════════════════════════════════════
@@ -224,6 +231,23 @@ function updateCartScroll () {
   cartCanScrollDown.value = !!el && (el.scrollHeight - el.scrollTop - el.clientHeight > 8)
 }
 watch([() => cartLines.length, cartOpen], () => { nextTick(updateCartScroll) })
+
+// Desplaza la lista del carrito hasta el producto recién agregado
+function scrollToCartLine (key) {
+  nextTick(() => {
+    const el = cartItemsEl.value
+    if (!el) return
+    const item = el.querySelector(`[data-key="${key}"]`)
+    if (item) {
+      const top = el.scrollTop + (item.getBoundingClientRect().top - el.getBoundingClientRect().top) - 10
+      el.scrollTo({ top: Math.max(0, top), behavior: 'auto' })
+      item.classList.remove('just-added')
+      void item.offsetWidth
+      item.classList.add('just-added')
+    }
+    updateCartScroll()
+  })
+}
 
 const lightboxSrc = ref(null)
 function openLightbox (src) { lightboxSrc.value = src }
@@ -532,7 +556,7 @@ const MID_TICKER = [
                 <b v-if="p.orilla" class="pl-orilla">+{{ money(p.orilla) }} orilla</b>
               </span>
               <button v-if="p.size !== 'Calzone'" class="pl-add" :aria-label="'Armar pizza ' + p.size" @click="openPizzaModal(null, p.size)">+</button>
-              <button v-else class="pl-add" aria-label="Agregar Calzone" @click="addSnack({ name: 'Calzone', price: p.price })">+</button>
+              <button v-else class="pl-add" aria-label="Agregar Calzone" @click="addSnack({ name: 'Calzone', price: p.price, icon: '🥟' })">+</button>
             </li>
           </ul>
           <p class="board-foot marker">🧀 Orilla rellena 100% de queso</p>
@@ -714,12 +738,12 @@ const MID_TICKER = [
       <div v-if="cartQty === 0" class="cart-empty">
         <span class="big">🍕</span><span class="marker">tu pedido está vacío…</span><br>Agrega un combo desde el menú.
       </div>
-      <div v-for="l in cartLines" :key="l.key" class="cart-item">
+      <div v-for="l in cartLines" :key="l.key" class="cart-item" :data-key="l.key">
         <img v-if="l.kind === 'combo'" class="ci-thumb" :src="l.img" alt="">
         <div v-else-if="l.kind === 'pizza'" class="ci-thumb ci-pizza" aria-hidden="true">
           <PizzaSvg :ings="l.ings.length ? [...l.specIngs, ...l.ings] : (l.specIngs.length ? l.specIngs : ['peperoni'])" />
         </div>
-        <div v-else class="ci-thumb ci-snack" aria-hidden="true">🍟</div>
+        <div v-else class="ci-thumb ci-snack" aria-hidden="true">{{ l.icon || '🍽️' }}</div>
         <div class="ci-info">
           <div class="ci-name">{{ l.name }}</div>
           <div v-if="l.kind === 'pizza'" class="ci-detail">
@@ -1612,6 +1636,12 @@ footer h4{
   border:2px solid var(--ink);
   padding:10px 12px;
   box-shadow:3px 3px 0 rgba(20,20,22,.25);
+}
+.cart-item.just-added{animation:justAdded 1.1s ease}
+@keyframes justAdded{
+  0%{box-shadow:0 0 0 0 var(--gold), 3px 3px 0 rgba(20,20,22,.25);transform:scale(1)}
+  25%{box-shadow:0 0 0 4px var(--gold), 3px 3px 0 rgba(20,20,22,.25);transform:scale(1.02)}
+  100%{box-shadow:0 0 0 0 rgba(255,183,3,0), 3px 3px 0 rgba(20,20,22,.25);transform:scale(1)}
 }
 .ci-thumb{width:52px;height:52px;object-fit:cover;flex-shrink:0;border:2px solid var(--ink)}
 .ci-thumb.ci-pizza{display:grid;place-items:center;background:#fff;padding:2px}
