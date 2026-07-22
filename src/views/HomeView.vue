@@ -275,7 +275,7 @@ function showToast (msg) {
 /* ══════════════════════════════════════════════
    FORMULARIO + WHATSAPP
 ══════════════════════════════════════════════ */
-const form = reactive({ name: '', addr: '', notes: '' })
+const form = reactive({ name: '', phone: '', addr: '', notes: '' })
 
 function lineDesc (l) {
   if (l.kind !== 'pizza') return ''
@@ -295,6 +295,7 @@ function sendWhatsapp () {
   }
   lines.push('', `*Total: ${money(cartTotal.value)}*`)
   if (form.name) lines.push('', `👤 Nombre: ${form.name}`)
+  if (form.phone) lines.push(`📱 Teléfono: ${form.phone}`)
   if (form.addr) lines.push(`📍 Dirección: ${form.addr}`)
   if (form.notes) lines.push(`📝 Notas: ${form.notes}`)
   lines.push('', '¡Gracias!')
@@ -767,6 +768,10 @@ const MID_TICKER = [
       <div>
         <label for="fName">tu nombre</label>
         <input type="text" id="fName" v-model="form.name" placeholder="Ej. Juan Pérez" maxlength="60">
+      </div>
+      <div>
+        <label for="fPhone">teléfono</label>
+        <input type="tel" id="fPhone" v-model="form.phone" placeholder="Ej. 333 599 2647" maxlength="20">
       </div>
       <div>
         <label for="fAddr">dirección de entrega</label>
