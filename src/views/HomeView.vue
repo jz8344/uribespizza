@@ -119,29 +119,94 @@ function matchesFilter (combo) {
 }
 
 /* ══════════════════════════════════════════════
-   CARRITO
+   CARRITO — por líneas: cada pizza lleva su propio
+   tamaño, orilla e ingredientes (sin mezclarse)
 ══════════════════════════════════════════════ */
-const cart = reactive({}) // id -> qty
+const ING_EXTRA = 10          // cada ingrediente extra (+$10, Pastor +$25) — sin límite de cantidad
+const SIZE_OPTS = PIZZAS.filter(p => p.size !== 'Calzone')
+
+let lineSeq = 0
+const cartLines = reactive([])
 const bump = ref(false)
 
-const cartQty = computed(() => Object.values(cart).reduce((a, b) => a + b, 0))
-const cartTotal = computed(() =>
-  Object.entries(cart).reduce((s, [id, q]) => s + COMBOS.find(c => c.id === id).price * q, 0)
-)
-const cartEntries = computed(() =>
-  Object.entries(cart).map(([id, q]) => ({ ...COMBOS.find(c => c.id === id), qty: q }))
-)
+function ingsCost (ings) {
+  return ings.reduce((s, i) => s + (i === 'Pastor' ? PASTOR_EXTRA : ING_EXTRA), 0)
+}
+function pizzaUnit (l) {
+  const s = SIZE_OPTS.find(o => o.size === l.size)
+  return s.price + (l.orilla ? s.orilla : 0) + (l.specExtra || 0) + ingsCost(l.ings)
+}
+function lineUnit (l) {
+  if (l.kind === 'pizza') return pizzaUnit(l)
+  return l.price
+}
+const cartQty = computed(() => cartLines.reduce((a, l) => a + l.qty, 0))
+const cartTotal = computed(() => cartLines.reduce((a, l) => a + lineUnit(l) * l.qty, 0))
 
-function addToCart (id) {
-  cart[id] = (cart[id] || 0) + 1
+function pulse (msg) {
   bump.value = false
   nextTick(() => { bump.value = true })
-  showToast(`✔ ${COMBOS.find(c => c.id === id).name} agregado`)
+  showToast(msg)
 }
-function changeQty (id, op) {
-  const q = (cart[id] || 0) + op
-  if (q <= 0) delete cart[id]
-  else cart[id] = q
+function addCombo (id) {
+  const c = COMBOS.find(x => x.id === id)
+  const ex = cartLines.find(l => l.kind === 'combo' && l.ref === id)
+  if (ex) ex.qty++
+  else cartLines.push({ key: ++lineSeq, kind: 'combo', ref: id, name: c.name, price: c.price, img: c.img, qty: 1 })
+  pulse(`✔ ${c.name} agregado`)
+}
+function addSnack (s) {
+  const ex = cartLines.find(l => l.kind === 'snack' && l.ref === s.name)
+  if (ex) ex.qty++
+  else cartLines.push({ key: ++lineSeq, kind: 'snack', ref: s.name, name: s.name, price: s.price, qty: 1 })
+  pulse(`✔ ${s.name} agregado`)
+}
+function changeQty (key, op) {
+  const i = cartLines.findIndex(l => l.key === key)
+  if (i < 0) return
+  cartLines[i].qty += op
+  if (cartLines[i].qty <= 0) cartLines.splice(i, 1)
+}
+
+/* ── Configurador de pizza (especialidad o armada) ── */
+const pizzaModal = reactive({ open: false, spec: null, size: 'Grande', orilla: false, ings: [] })
+function openPizzaModal (spec, size) {
+  pizzaModal.spec = spec || null
+  pizzaModal.size = size || 'Grande'
+  pizzaModal.orilla = false
+  pizzaModal.ings = []
+  pizzaModal.open = true
+}
+function closePizzaModal () { pizzaModal.open = false }
+function toggleModalIng (name) {
+  const i = pizzaModal.ings.indexOf(name)
+  if (i >= 0) pizzaModal.ings.splice(i, 1)
+  else pizzaModal.ings.push(name)
+}
+const modalUnit = computed(() => {
+  if (!pizzaModal.open) return 0
+  return pizzaUnit({ size: pizzaModal.size, orilla: pizzaModal.orilla, specExtra: pizzaModal.spec?.extra || 0, ings: pizzaModal.ings })
+})
+const modalOrillaCost = computed(() => SIZE_OPTS.find(o => o.size === pizzaModal.size)?.orilla || 0)
+function confirmPizza () {
+  const spec = pizzaModal.spec
+  const name = spec ? `Pizza ${spec.name}` : 'Pizza a tu gusto'
+  const sig = [name, pizzaModal.size, pizzaModal.orilla, [...pizzaModal.ings].sort().join('|')].join('·')
+  const ex = cartLines.find(l => l.kind === 'pizza' && l.sig === sig)
+  if (ex) ex.qty++
+  else {
+    cartLines.push({
+      key: ++lineSeq, kind: 'pizza', sig, name,
+      size: pizzaModal.size, orilla: pizzaModal.orilla,
+      ings: [...pizzaModal.ings],
+      specExtra: spec?.extra || 0,
+      specIngs: spec ? spec.ings : [],
+      qty: 1
+    })
+  }
+  pulse(`✔ ${name} (${pizzaModal.size}) agregada`)
+  closePizzaModal()
+  openCart()
 }
 
 /* ══════════════════════════════════════════════
@@ -155,8 +220,8 @@ const lightboxSrc = ref(null)
 function openLightbox (src) { lightboxSrc.value = src }
 function closeLightbox () { lightboxSrc.value = null }
 
-watch([cartOpen, lightboxSrc], ([c, l]) => {
-  document.body.style.overflow = (c || l) ? 'hidden' : ''
+watch([cartOpen, lightboxSrc, () => pizzaModal.open], ([c, l, m]) => {
+  document.body.style.overflow = (c || l || m) ? 'hidden' : ''
 })
 
 const menuOpen = ref(false)
@@ -177,40 +242,25 @@ function showToast (msg) {
 /* ══════════════════════════════════════════════
    FORMULARIO + WHATSAPP
 ══════════════════════════════════════════════ */
-const form = reactive({ name: '', addr: '', flavor: '', ings: [], notes: '' })
+const form = reactive({ name: '', addr: '', notes: '' })
 
-// Selección de ingredientes personalizados (máximo 3 por pizza)
-const MAX_INGS = 3
-function toggleFormIng (name) {
-  const i = form.ings.indexOf(name)
-  if (i >= 0) form.ings.splice(i, 1)
-  else if (form.ings.length < MAX_INGS) form.ings.push(name)
+function lineDesc (l) {
+  if (l.kind !== 'pizza') return ''
+  const parts = [l.size]
+  if (l.orilla) parts.push('orilla de queso')
+  if (l.ings.length) parts.push('extra: ' + l.ings.join(', '))
+  return parts.join(' · ')
 }
-
-// Costo de extras: cada ingrediente +$10, Pastor +$25, especialidad según su extra
-const ING_EXTRA = 10
-const flavorExtra = computed(() => {
-  const e = ESPECIALIDADES.find((x) => x.name === form.flavor)
-  return e && e.extra ? e.extra : 0
-})
-const ingsExtra = computed(() =>
-  form.ings.reduce((s, ing) => s + (ing === 'Pastor' ? PASTOR_EXTRA : ING_EXTRA), 0)
-)
-const extrasTotal = computed(() => flavorExtra.value + ingsExtra.value)
-const orderTotal = computed(() => cartTotal.value + extrasTotal.value)
 
 function sendWhatsapp () {
   if (cartTotal.value === 0) return
   const lines = ["Hola Uribe's Pizza! 🍕 Quisiera pedir:", '']
-  for (const item of cartEntries.value) {
-    lines.push(`• ${item.qty}x ${item.name} (${money(item.price)} c/u) = ${money(item.price * item.qty)}`)
+  for (const l of cartLines) {
+    const u = lineUnit(l)
+    const desc = lineDesc(l)
+    lines.push(`• ${l.qty}x ${l.name}${desc ? ` (${desc})` : ''} — ${money(u)} c/u = ${money(u * l.qty)}`)
   }
-  if (form.flavor) lines.push('', `🍕 Especialidad: ${form.flavor}${flavorExtra.value ? ` (+${money(flavorExtra.value)})` : ''}`)
-  if (form.ings.length) {
-    const list = form.ings.map((ing) => `${ing} (+${money(ing === 'Pastor' ? PASTOR_EXTRA : ING_EXTRA)})`).join(', ')
-    lines.push(`🧀 Ingredientes: ${list}`)
-  }
-  lines.push('', `*Total: ${money(orderTotal.value)}*`)
+  lines.push('', `*Total: ${money(cartTotal.value)}*`)
   if (form.name) lines.push('', `👤 Nombre: ${form.name}`)
   if (form.addr) lines.push(`📍 Dirección: ${form.addr}`)
   if (form.notes) lines.push(`📝 Notas: ${form.notes}`)
@@ -259,7 +309,7 @@ let statusInterval
 let io
 let revealFallback
 function onKeydown (e) {
-  if (e.key === 'Escape') { closeCart(); closeLightbox() }
+  if (e.key === 'Escape') { closeCart(); closeLightbox(); closePizzaModal() }
 }
 onMounted(() => {
   updateStatus()
@@ -429,7 +479,7 @@ const MID_TICKER = [
             <ul class="flyer-includes">
               <li v-for="(inc, i) in c.includes" :key="i">{{ inc }}</li>
             </ul>
-            <button class="btn-add" :aria-label="'Agregar ' + c.name + ' al pedido'" @click="addToCart(c.id)">
+            <button class="btn-add" :aria-label="'Agregar ' + c.name + ' al pedido'" @click="addCombo(c.id)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
               Agregar al pedido
             </button>
@@ -472,6 +522,8 @@ const MID_TICKER = [
                 <em v-if="p.duo" class="pl-duo">2×{{ money(p.duo) }}</em>
                 <b v-if="p.orilla" class="pl-orilla">+{{ money(p.orilla) }} orilla</b>
               </span>
+              <button v-if="p.size !== 'Calzone'" class="pl-add" :aria-label="'Armar pizza ' + p.size" @click="openPizzaModal(null, p.size)">+</button>
+              <button v-else class="pl-add" aria-label="Agregar Calzone" @click="addSnack({ name: 'Calzone', price: p.price })">+</button>
             </li>
           </ul>
           <p class="board-foot marker">🧀 Orilla rellena 100% de queso</p>
@@ -490,6 +542,7 @@ const MID_TICKER = [
               </span>
               <span class="pl-dots" aria-hidden="true"></span>
               <span class="pl-prices"><span class="pl-main">{{ money(s.price) }}</span></span>
+              <button class="pl-add" :aria-label="'Agregar ' + s.name" @click="addSnack(s)">+</button>
             </li>
           </ul>
         </div>
@@ -512,6 +565,10 @@ const MID_TICKER = [
           <div class="esp-ings">
             <span v-for="ing in e.ings" :key="ing">{{ ing }}</span>
           </div>
+          <button class="btn-esp-add" @click="openPizzaModal(e)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Agregar · elige tamaño
+          </button>
         </article>
       </div>
 
@@ -520,14 +577,14 @@ const MID_TICKER = [
         <span class="tape"></span>
         <div class="ing-panel-in">
           <h3>🧑‍🍳 Arma tu pizza</h3>
-          <p class="ing-lead">Elige <strong>hasta 3 ingredientes</strong> — +{{ money(ING_EXTRA) }} c/u. El Pastor +{{ money(PASTOR_EXTRA) }}.</p>
+          <p class="ing-lead">Agrega <strong>los ingredientes que quieras</strong> — +{{ money(ING_EXTRA) }} c/u. El Pastor +{{ money(PASTOR_EXTRA) }}.</p>
           <div class="ing-chips">
             <span v-for="ing in INGREDIENTES" :key="ing">{{ ing }}</span>
             <span class="ing-pastor">Pastor +{{ money(PASTOR_EXTRA) }}</span>
           </div>
-          <a class="btn btn-wa ing-cta" href="https://wa.me/523335992647?text=Hola%20Uribe%27s%20Pizza!%20Quiero%20armar%20mi%20pizza%20%F0%9F%8D%95" target="_blank" rel="noopener">
-            🍕 Arma tu pizza por WhatsApp
-          </a>
+          <button class="btn btn-wa ing-cta" type="button" @click="openPizzaModal(null)">
+            🍕 Arma tu pizza aquí
+          </button>
         </div>
       </div>
     </div>
@@ -647,16 +704,24 @@ const MID_TICKER = [
       <div v-if="cartQty === 0" class="cart-empty">
         <span class="big">🍕</span><span class="marker">tu pedido está vacío…</span><br>Agrega un combo desde el menú.
       </div>
-      <div v-for="item in cartEntries" :key="item.id" class="cart-item">
-        <img class="ci-thumb" :src="item.img" alt="">
+      <div v-for="l in cartLines" :key="l.key" class="cart-item">
+        <img v-if="l.kind === 'combo'" class="ci-thumb" :src="l.img" alt="">
+        <div v-else-if="l.kind === 'pizza'" class="ci-thumb ci-pizza" aria-hidden="true">
+          <PizzaSvg :ings="l.ings.length ? [...l.specIngs, ...l.ings] : (l.specIngs.length ? l.specIngs : ['peperoni'])" />
+        </div>
+        <div v-else class="ci-thumb ci-snack" aria-hidden="true">🍟</div>
         <div class="ci-info">
-          <div class="ci-name">{{ item.name }}</div>
-          <div class="ci-price">{{ money(item.price) }} c/u · {{ money(item.price * item.qty) }}</div>
+          <div class="ci-name">{{ l.name }}</div>
+          <div v-if="l.kind === 'pizza'" class="ci-detail">
+            <b>{{ l.size }}</b><span v-if="l.orilla"> · 🧀 orilla de queso</span>
+            <span v-if="l.ings.length"> · +{{ l.ings.join(', +') }}</span>
+          </div>
+          <div class="ci-price">{{ money(lineUnit(l)) }} c/u · {{ money(lineUnit(l) * l.qty) }}</div>
         </div>
         <div class="ci-qty">
-          <button class="qty-btn" aria-label="Quitar uno" @click="changeQty(item.id, -1)">−</button>
-          <span>{{ item.qty }}</span>
-          <button class="qty-btn" aria-label="Agregar uno" @click="changeQty(item.id, 1)">+</button>
+          <button class="qty-btn" aria-label="Quitar uno" @click="changeQty(l.key, -1)">−</button>
+          <span>{{ l.qty }}</span>
+          <button class="qty-btn" aria-label="Agregar uno" @click="changeQty(l.key, 1)">+</button>
         </div>
       </div>
     </div>
@@ -670,41 +735,14 @@ const MID_TICKER = [
         <input type="text" id="fAddr" v-model="form.addr" placeholder="Calle, número, colonia y referencias" maxlength="140">
       </div>
       <div>
-        <label for="fFlavor">especialidad de pizza</label>
-        <select id="fFlavor" v-model="form.flavor">
-          <option value="">— Elegir especialidad (opcional) —</option>
-          <option v-for="e in ESPECIALIDADES" :key="e.name" :value="e.name">
-            {{ e.name }}{{ e.extra ? ` (+${money(e.extra)})` : '' }}
-          </option>
-        </select>
-      </div>
-      <div>
-        <label>
-          o arma tu pizza — ingredientes
-          <span class="ing-hint">({{ form.ings.length }}/{{ MAX_INGS }} · +{{ money(ING_EXTRA) }} c/u)</span>
-        </label>
-        <div class="ing-picker">
-          <button v-for="ing in INGREDIENTES" :key="ing" type="button"
-            class="ing-pick" :class="{ on: form.ings.includes(ing) }"
-            :disabled="!form.ings.includes(ing) && form.ings.length >= MAX_INGS"
-            @click="toggleFormIng(ing)">{{ ing }}</button>
-          <button type="button" class="ing-pick pastor" :class="{ on: form.ings.includes('Pastor') }"
-            :disabled="!form.ings.includes('Pastor') && form.ings.length >= MAX_INGS"
-            @click="toggleFormIng('Pastor')">Pastor +{{ money(PASTOR_EXTRA) }}</button>
-        </div>
-      </div>
-      <div>
         <label for="fNotes">notas del pedido</label>
         <textarea id="fNotes" rows="2" v-model="form.notes" placeholder="Ej. refresco bien frío, aderezo extra…" maxlength="200"></textarea>
       </div>
     </form>
     <div class="cart-foot">
-      <div v-if="extrasTotal > 0" class="cart-extra-row">
-        <span>Combos {{ money(cartTotal) }} <b>+ extras {{ money(extrasTotal) }}</b></span>
-      </div>
       <div class="cart-total-row">
         <span class="label">total del pedido</span>
-        <span class="amount">{{ money(orderTotal) }}</span>
+        <span class="amount">{{ money(cartTotal) }}</span>
       </div>
       <button class="btn-send-wa" :disabled="cartQty === 0" @click="sendWhatsapp">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.019-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
@@ -712,6 +750,67 @@ const MID_TICKER = [
       </button>
     </div>
   </aside>
+
+  <!-- ═══════════ CONFIGURADOR DE PIZZA ═══════════ -->
+  <div class="pz-overlay" :class="{ show: pizzaModal.open }" @click.self="closePizzaModal">
+    <div class="pz-modal" role="dialog" aria-label="Configura tu pizza">
+      <div class="pz-head">
+        <div>
+          <div class="pz-title">{{ pizzaModal.spec ? 'Pizza ' + pizzaModal.spec.name : '🧑‍🍳 Arma tu pizza' }}</div>
+          <div v-if="pizzaModal.spec" class="pz-sub">
+            lleva: {{ pizzaModal.spec.ings.join(', ') }}
+            <b v-if="pizzaModal.spec.extra"> (+{{ money(pizzaModal.spec.extra) }})</b>
+          </div>
+          <div v-else class="pz-sub">elige tamaño e ingredientes</div>
+        </div>
+        <button class="pz-close" aria-label="Cerrar" @click="closePizzaModal">✕</button>
+      </div>
+
+      <div class="pz-body">
+        <div class="pz-label">1 · Elige el tamaño</div>
+        <div class="pz-sizes">
+          <button v-for="s in SIZE_OPTS" :key="s.size" type="button"
+            class="pz-size" :class="{ on: pizzaModal.size === s.size }"
+            @click="pizzaModal.size = s.size">
+            <span class="pz-size-name">{{ s.size }}</span>
+            <span class="pz-size-price">{{ money(s.price) }}</span>
+          </button>
+        </div>
+
+        <div class="pz-label">2 · ¿Orilla rellena de queso?</div>
+        <button type="button" class="pz-orilla" :class="{ on: pizzaModal.orilla }" @click="pizzaModal.orilla = !pizzaModal.orilla">
+          <span class="pz-check" aria-hidden="true">{{ pizzaModal.orilla ? '✔' : '' }}</span>
+          🧀 Sí, con orilla de queso <b>+{{ money(modalOrillaCost) }}</b>
+        </button>
+
+        <div class="pz-label">
+          3 · Ingredientes extra
+          <span class="pz-hint">
+            <template v-if="pizzaModal.ings.length">{{ pizzaModal.ings.length }} · +{{ money(ingsCost(pizzaModal.ings)) }}</template>
+            <template v-else>+{{ money(ING_EXTRA) }} c/u · los que quieras</template>
+          </span>
+        </div>
+        <div class="ing-picker">
+          <button v-for="ing in INGREDIENTES" :key="ing" type="button"
+            class="ing-pick" :class="{ on: pizzaModal.ings.includes(ing) }"
+            @click="toggleModalIng(ing)">{{ ing }}</button>
+          <button type="button" class="ing-pick pastor" :class="{ on: pizzaModal.ings.includes('Pastor') }"
+            @click="toggleModalIng('Pastor')">Pastor +{{ money(PASTOR_EXTRA) }}</button>
+        </div>
+      </div>
+
+      <div class="pz-foot">
+        <div class="pz-total">
+          <span>esta pizza:</span>
+          <b>{{ money(modalUnit) }}</b>
+        </div>
+        <button class="pz-confirm" @click="confirmPizza">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          Agregar al pedido
+        </button>
+      </div>
+    </div>
+  </div>
 
   <div class="toast" :class="{ show: toastShow }">{{ toastMsg }}</div>
 </template>
@@ -1188,6 +1287,16 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
   border-top:1px dashed rgba(245,241,232,.25);
   font-size:1rem;color:var(--gold);text-align:center;
 }
+.pl-add{
+  flex-shrink:0;width:30px;height:30px;margin-left:4px;
+  background:var(--red);color:#fff;
+  border:2px solid rgba(245,241,232,.4);border-radius:9px;
+  font-weight:800;font-size:1.05rem;line-height:1;
+  display:grid;place-items:center;
+  transition:transform .15s, background .15s;
+  align-self:center;
+}
+.pl-add:hover{transform:scale(1.12) rotate(90deg);background:#fff;color:var(--red);border-color:var(--red)}
 
 .esp-head{text-align:center;margin:74px auto 34px;max-width:640px;position:relative;z-index:2}
 .esp-title{
@@ -1230,6 +1339,18 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
   background:var(--paper-2);border:1px solid rgba(20,20,22,.12);
   padding:4px 10px;border-radius:100px;
 }
+.btn-esp-add{
+  margin-top:14px;width:100%;
+  font-family:var(--font-poster);text-transform:uppercase;
+  letter-spacing:.05em;font-size:.85rem;
+  background:var(--ink);color:#fff;
+  padding:11px;border-radius:9px;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  box-shadow:3px 3px 0 var(--red);
+  transition:transform .18s, box-shadow .18s, background .18s;
+}
+.btn-esp-add:hover{transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--red);background:var(--red-deep)}
+.btn-esp-add svg{width:15px;height:15px;stroke:#fff;flex-shrink:0}
 
 .ing-panel{
   margin-top:44px;position:relative;z-index:2;
@@ -1462,8 +1583,13 @@ footer h4{
   box-shadow:3px 3px 0 rgba(20,20,22,.25);
 }
 .ci-thumb{width:52px;height:52px;object-fit:cover;flex-shrink:0;border:2px solid var(--ink)}
+.ci-thumb.ci-pizza{display:grid;place-items:center;background:#fff;padding:2px}
+.ci-thumb.ci-pizza .pizza-svg{animation:none;filter:none}
+.ci-thumb.ci-snack{display:grid;place-items:center;background:#fff;font-size:1.5rem}
 .ci-info{flex:1;min-width:0}
 .ci-name{font-weight:800;font-size:.84rem;line-height:1.2}
+.ci-detail{font-size:.72rem;color:var(--ink-soft);line-height:1.35;margin:2px 0}
+.ci-detail b{color:var(--red-deep)}
 .ci-price{color:var(--red-deep);font-weight:700;font-size:.8rem}
 .ci-qty{display:flex;align-items:center;gap:7px}
 .qty-btn{
@@ -1506,8 +1632,6 @@ footer h4{
   background:var(--ink);
   border-top:3px solid var(--red);
 }
-.cart-extra-row{font-size:.82rem;color:#b9b9c0;margin-bottom:6px}
-.cart-extra-row b{color:var(--gold);font-weight:700}
 .cart-total-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px}
 .cart-total-row .label{font-family:var(--font-brush);color:#b9b9c0;font-size:.95rem}
 .cart-total-row .amount{font-family:var(--font-poster);font-size:2rem;color:var(--gold)}
@@ -1524,6 +1648,93 @@ footer h4{
 }
 .btn-send-wa:hover{transform:translateY(-3px)}
 .btn-send-wa:disabled{opacity:.4;cursor:not-allowed;transform:none}
+
+/* ═══════════ CONFIGURADOR DE PIZZA ═══════════ */
+.pz-overlay{
+  position:fixed;inset:0;z-index:1050;
+  background:rgba(15,15,18,.6);
+  display:grid;place-items:center;padding:18px;
+  opacity:0;pointer-events:none;transition:opacity .28s;
+}
+.pz-overlay.show{opacity:1;pointer-events:auto}
+.pz-modal{
+  width:min(520px,100%);max-height:min(680px,92vh);
+  background:var(--paper);
+  border:3px solid var(--ink);
+  box-shadow:8px 8px 0 var(--red), 0 40px 90px rgba(0,0,0,.5);
+  display:flex;flex-direction:column;
+  transform:translateY(24px) scale(.97);transition:transform .28s cubic-bezier(.32,.72,0,1);
+}
+.pz-overlay.show .pz-modal{transform:translateY(0) scale(1)}
+.pz-head{
+  padding:16px 20px;
+  background:var(--ink);color:var(--paper);
+  border-bottom:3px solid var(--red);
+  display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+}
+.pz-title{font-family:var(--font-poster);text-transform:uppercase;font-size:1.35rem;letter-spacing:.03em;line-height:1.1}
+.pz-sub{font-size:.78rem;color:#b9b9c0;margin-top:4px}
+.pz-sub b{color:var(--gold)}
+.pz-close{
+  width:38px;height:38px;flex-shrink:0;border-radius:10px;
+  background:rgba(245,241,232,.12);color:#fff;
+  font-size:1.05rem;font-weight:800;
+  display:grid;place-items:center;transition:background .2s;
+}
+.pz-close:hover{background:var(--red)}
+.pz-body{flex:1;overflow-y:auto;padding:18px 20px}
+.pz-label{
+  font-family:var(--font-brush);font-size:.92rem;color:var(--red-deep);
+  margin:16px 0 9px;
+}
+.pz-body .pz-label:first-child{margin-top:0}
+.pz-hint{font-family:var(--font-body);font-weight:700;font-size:.72rem;color:var(--ink-soft)}
+.pz-sizes{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
+.pz-size{
+  background:#fdfcf9;border:2px solid var(--ink);
+  padding:9px 6px;border-radius:10px;
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  transition:transform .15s, background .15s, color .15s;
+}
+.pz-size:hover{transform:translateY(-2px)}
+.pz-size.on{background:var(--red);border-color:var(--red);color:#fff;box-shadow:3px 3px 0 var(--ink)}
+.pz-size-name{font-weight:800;font-size:.82rem}
+.pz-size-price{font-family:var(--font-poster);font-size:1.02rem;letter-spacing:.03em}
+.pz-orilla{
+  width:100%;
+  background:#fdfcf9;border:2px dashed var(--ink);
+  padding:12px 14px;border-radius:12px;
+  display:flex;align-items:center;gap:10px;
+  font-weight:700;font-size:.9rem;text-align:left;
+  transition:background .15s, border-color .15s;
+}
+.pz-orilla b{color:var(--red-deep);margin-left:auto}
+.pz-orilla.on{background:#fff7e0;border-color:var(--gold);border-style:solid}
+.pz-check{
+  width:24px;height:24px;flex-shrink:0;
+  border:2px solid var(--ink);border-radius:7px;
+  display:grid;place-items:center;
+  font-size:.8rem;color:#fff;background:#fdfcf9;
+}
+.pz-orilla.on .pz-check{background:var(--green);border-color:var(--green)}
+.pz-foot{
+  padding:14px 20px;
+  background:var(--ink);border-top:3px solid var(--red);
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+}
+.pz-total{display:flex;align-items:baseline;gap:8px;color:#b9b9c0}
+.pz-total span{font-family:var(--font-brush);font-size:.85rem}
+.pz-total b{font-family:var(--font-poster);font-size:1.7rem;color:var(--gold);font-weight:400}
+.pz-confirm{
+  font-family:var(--font-poster);text-transform:uppercase;
+  letter-spacing:.05em;font-size:.95rem;
+  background:#22C55E;color:#fff;
+  padding:13px 20px;border:3px solid var(--paper);border-radius:12px;
+  display:inline-flex;align-items:center;gap:8px;
+  transition:transform .18s;
+}
+.pz-confirm:hover{transform:translateY(-2px)}
+.pz-confirm svg{width:16px;height:16px;stroke:#fff}
 
 /* Toast */
 .toast{
@@ -1576,6 +1787,13 @@ footer h4{
   .pl-main{font-size:1.18rem}
   .ing-panel{padding:30px 20px}
   .ing-cta{width:100%}
+  /* configurador como hoja inferior en móvil */
+  .pz-overlay{padding:0;align-items:end}
+  .pz-modal{width:100%;max-height:94dvh;border-left:none;border-right:none;border-bottom:none;box-shadow:0 -20px 60px rgba(0,0,0,.55)}
+  .pz-sizes{grid-template-columns:repeat(3,1fr)}
+  .pz-foot{flex-direction:column;align-items:stretch;text-align:center}
+  .pz-total{justify-content:center}
+  .pz-confirm{justify-content:center}
 }
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}
