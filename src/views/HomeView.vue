@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import PizzaSvg from '../components/PizzaSvg.vue'
 
 /* ══════════════════════════════════════════════
    DATOS — combos con sus volantes reales
@@ -232,6 +233,7 @@ function updateStatus () {
 ══════════════════════════════════════════════ */
 let statusInterval
 let io
+let revealFallback
 function onKeydown (e) {
   if (e.key === 'Escape') { closeCart(); closeLightbox() }
 }
@@ -248,10 +250,20 @@ onMounted(() => {
   nextTick(() => {
     document.querySelectorAll('.reveal').forEach((el) => io.observe(el))
   })
+
+  // Red de seguridad: si el observer no dispara (algunos móviles / webviews),
+  // nada quedaría visible. Tras un momento, si nada se reveló, mostramos todo.
+  revealFallback = setTimeout(() => {
+    const revs = [...document.querySelectorAll('.reveal')]
+    if (!revs.some((el) => el.classList.contains('visible'))) {
+      revs.forEach((el) => el.classList.add('visible'))
+    }
+  }, 1500)
 })
 onUnmounted(() => {
   clearInterval(statusInterval)
   clearTimeout(toastTimer)
+  clearTimeout(revealFallback)
   document.removeEventListener('keydown', onKeydown)
   if (io) io.disconnect()
   document.body.style.overflow = ''
@@ -466,6 +478,9 @@ const MID_TICKER = [
       </div>
       <div class="esp-grid">
         <article v-for="e in ESPECIALIDADES" :key="e.name" class="esp-card reveal">
+          <div class="esp-pizza">
+            <PizzaSvg :ings="e.ings" />
+          </div>
           <div class="esp-name">
             {{ e.name }}
             <span v-if="e.extra" class="esp-extra">+{{ money(e.extra) }}</span>
@@ -1152,6 +1167,11 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .esp-card:nth-child(even){transform:rotate(-1deg)}
 .esp-card:nth-child(odd){transform:rotate(.8deg)}
 .esp-card:hover{transform:rotate(0) translateY(-4px);box-shadow:7px 7px 0 var(--red)}
+.esp-pizza{
+  width:162px;margin:-6px auto 10px;
+  pointer-events:none;
+}
+.esp-card:hover .pizza-wrap{transform:scale(1.08) rotate(-3deg)}
 .esp-name{
   font-family:var(--font-poster);text-transform:uppercase;
   font-size:1.2rem;letter-spacing:.02em;color:var(--ink);
@@ -1476,6 +1496,9 @@ footer h4{
   .nav-links{display:none}
   .hamburger{display:grid}
   .footer-grid{grid-template-columns:1fr;gap:32px}
+  /* En móvil no dependemos del scroll-reveal: mostramos todo siempre */
+  .reveal{opacity:1;transform:none}
+  .combos-grid .flyer-card.reveal:not(.visible){opacity:1;transform:none}
 }
 @media (max-width:560px){
   .hero{padding:44px 0 70px}
