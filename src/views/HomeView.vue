@@ -61,6 +61,49 @@ const COMBOS = [
 const money = (n) => '$' + n.toLocaleString('es-MX')
 
 /* ══════════════════════════════════════════════
+   CARTA — menú real del cliente (precios oficiales)
+══════════════════════════════════════════════ */
+// Pizzas por tamaño · precio individual · 2× promo · costo extra de orilla de queso
+const PIZZAS = [
+  { size: 'Chica',    price: 90,  duo: null, orilla: 20 },
+  { size: 'Mediana',  price: 120, duo: null, orilla: 20 },
+  { size: 'Grande',   price: 145, duo: 270,  orilla: 25 },
+  { size: 'Familiar', price: 160, duo: 300,  orilla: 30 },
+  { size: 'Jumbo',    price: 185, duo: 350,  orilla: 35 },
+  { size: 'Mega',     price: 210, duo: 400,  orilla: 35 },
+  { size: 'Cuadrada', price: 220, duo: 430,  orilla: 40 },
+  { size: 'Calzone',  price: 75,  duo: null, orilla: null }
+]
+
+const SNACKS = [
+  { name: 'Alitas',            price: 85, note: 'BBQ · Búfalo · Mango habanero' },
+  { name: 'Nuggets',           price: 65 },
+  { name: 'Aros de cebolla',   price: 65 },
+  { name: 'Hamburguesa',       price: 75 },
+  { name: 'Papas gajo',        price: 50 },
+  { name: 'Papas a la francesa', price: 45 },
+  { name: 'Canelasos',         price: 65 },
+  { name: 'Pan de ajo',        price: 65 },
+  { name: 'Hot dog',           price: 30 }
+]
+
+// Especialidades ya armadas · extra = costo adicional sobre el precio de la pizza
+const ESPECIALIDADES = [
+  { name: 'Hawaiana',     ings: ['Jamón', 'Piña'], extra: null },
+  { name: 'Carnes Frías', ings: ['Jamón', 'Salami', 'Salchicha'], extra: null },
+  { name: 'Italiana',     ings: ['Jamón', 'Piña', 'Salchicha'], extra: null },
+  { name: 'Mexicana',     ings: ['Chorizo', 'Tocino', 'Jalapeño'], extra: null },
+  { name: 'Ranchera',     ings: ['Chorizo', 'Tocino', 'Jitomate', 'Cebolla', 'Jalapeño'], extra: null },
+  { name: 'Vegetariana',  ings: ['Piña', 'Elote', 'Morrón', 'Champiñón'], extra: null },
+  { name: 'Carnívora',    ings: ['Jamón', 'Salami', 'Salchicha', 'Chorizo', 'Tocino', 'Peperoni'], extra: 20 },
+  { name: 'Especial',     ings: ['Jamón', 'Salchicha', 'Salami', 'Chorizo', 'Piña', 'Champiñón', 'Tocino', 'Morrón'], extra: 35 }
+]
+
+// Ingredientes a elegir (3 por pizza, sin costo). Pastor con costo extra.
+const INGREDIENTES = ['Jamón', 'Salchicha', 'Salami', 'Chorizo', 'Tocino', 'Peperoni', 'Piña', 'Champiñón', 'Morrón', 'Elote', 'Jitomate', 'Cebolla', 'Aceitunas']
+const PASTOR_EXTRA = 25
+
+/* ══════════════════════════════════════════════
    FILTROS
 ══════════════════════════════════════════════ */
 const activeFilter = ref('todos')
@@ -245,7 +288,7 @@ const MID_TICKER = [
   <header class="navbar">
     <div class="nav-inner">
       <a href="#inicio" class="brand" aria-label="Uribe's Pizza — Inicio">
-        <span class="brand-logo" aria-hidden="true">👨‍🍳</span>
+        <img class="brand-logo" :src="IMG + 'Logo.png'" alt="" aria-hidden="true">
         <span class="brand-text">
           <span class="brand-name">URIBE'S <em>PIZZA</em></span><br>
           <span class="status-pill" :class="isOpen ? 'open' : 'closed'">
@@ -257,6 +300,7 @@ const MID_TICKER = [
         <ul class="nav-links">
           <li><a href="#inicio">Inicio</a></li>
           <li><a href="#menu">Combos</a></li>
+          <li><a href="#carta">Carta</a></li>
           <li><a href="#ubicacion">Ubicación</a></li>
           <li><a href="#contacto">Contacto</a></li>
         </ul>
@@ -276,6 +320,7 @@ const MID_TICKER = [
   <div class="mobile-menu" :class="{ show: menuOpen }">
     <a href="#inicio" @click="menuOpen = false">🏠 Inicio</a>
     <a href="#menu" @click="menuOpen = false">🍕 Combos</a>
+    <a href="#carta" @click="menuOpen = false">📋 Carta</a>
     <a href="#ubicacion" @click="menuOpen = false">📍 Ubicación</a>
     <a href="#contacto" @click="menuOpen = false">📞 Contacto</a>
   </div>
@@ -367,6 +412,88 @@ const MID_TICKER = [
     </div>
   </div>
 
+  <!-- ═══════════ CARTA COMPLETA ═══════════ -->
+  <section class="carta-sec" id="carta">
+    <div class="container">
+      <div class="sec-head reveal">
+        <span class="sec-kicker dark-k">arma tu pizza como quieras…</span>
+        <h2 class="sec-title dark">La carta <span class="red">completa</span></h2>
+        <p class="sec-note dark">Precios reales de nuestro menú. Elige el tamaño, agrégale orilla rellena de queso y hasta <strong>3 ingredientes</strong> por pizza.</p>
+      </div>
+
+      <div class="boards-grid">
+        <!-- PIZZAS -->
+        <div class="menu-board reveal">
+          <span class="tape"></span>
+          <h3 class="board-title">🍕 Pizzas</h3>
+          <p class="board-legend">precio · <em>2×</em> promo · <b>+orilla de queso</b></p>
+          <ul class="price-list">
+            <li v-for="p in PIZZAS" :key="p.size">
+              <span class="pl-name">{{ p.size }}</span>
+              <span class="pl-dots" aria-hidden="true"></span>
+              <span class="pl-prices">
+                <span class="pl-main">{{ money(p.price) }}</span>
+                <em v-if="p.duo" class="pl-duo">2×{{ money(p.duo) }}</em>
+                <b v-if="p.orilla" class="pl-orilla">+{{ money(p.orilla) }} orilla</b>
+              </span>
+            </li>
+          </ul>
+          <p class="board-foot marker">🧀 Orilla rellena 100% de queso</p>
+        </div>
+
+        <!-- SNACKS -->
+        <div class="menu-board reveal">
+          <span class="tape"></span>
+          <h3 class="board-title">🍟 Snacks & extras</h3>
+          <p class="board-legend">para acompañar tu pizza</p>
+          <ul class="price-list">
+            <li v-for="s in SNACKS" :key="s.name">
+              <span class="pl-name">
+                {{ s.name }}
+                <small v-if="s.note">{{ s.note }}</small>
+              </span>
+              <span class="pl-dots" aria-hidden="true"></span>
+              <span class="pl-prices"><span class="pl-main">{{ money(s.price) }}</span></span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ESPECIALIDADES -->
+      <div class="esp-head reveal">
+        <span class="sec-kicker dark-k">o pídela ya armada…</span>
+        <h3 class="esp-title">Especialidades <span class="red">de la casa</span></h3>
+      </div>
+      <div class="esp-grid">
+        <article v-for="e in ESPECIALIDADES" :key="e.name" class="esp-card reveal">
+          <div class="esp-name">
+            {{ e.name }}
+            <span v-if="e.extra" class="esp-extra">+{{ money(e.extra) }}</span>
+          </div>
+          <div class="esp-ings">
+            <span v-for="ing in e.ings" :key="ing">{{ ing }}</span>
+          </div>
+        </article>
+      </div>
+
+      <!-- INGREDIENTES -->
+      <div class="ing-panel reveal">
+        <span class="tape"></span>
+        <div class="ing-panel-in">
+          <h3>🧑‍🍳 Elige tus ingredientes</h3>
+          <p class="ing-lead"><strong>3 ingredientes</strong> por pizza — ¡sin costo extra! Combínalos a tu gusto.</p>
+          <div class="ing-chips">
+            <span v-for="ing in INGREDIENTES" :key="ing">{{ ing }}</span>
+            <span class="ing-pastor">Pastor +{{ money(PASTOR_EXTRA) }}</span>
+          </div>
+          <a class="btn btn-wa ing-cta" href="https://wa.me/523335992647?text=Hola%20Uribe%27s%20Pizza!%20Quiero%20armar%20mi%20pizza%20%F0%9F%8D%95" target="_blank" rel="noopener">
+            🍕 Arma tu pizza por WhatsApp
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ═══════════ UBICACIÓN ═══════════ -->
   <section class="loc-sec" id="ubicacion">
     <div class="container">
@@ -424,7 +551,7 @@ const MID_TICKER = [
       <div class="footer-grid">
         <div class="footer-brand">
           <a href="#inicio" class="brand">
-            <span class="brand-logo" aria-hidden="true">👨‍🍳</span>
+            <img class="brand-logo" :src="IMG + 'Logo.png'" alt="" aria-hidden="true">
             <span class="brand-name" style="font-size:1.4rem;color:#fff">URIBE'S <em style="font-style:normal;color:var(--red)">PIZZA</em></span>
           </a>
           <p>Pizzas artesanales con orilla rellena de queso y el sabor que une a la familia. Servicio a domicilio en La Fortuna y alrededores.</p>
@@ -604,11 +731,9 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .nav-inner{width:min(1200px,94%);margin-inline:auto;display:flex;align-items:center;justify-content:space-between;gap:14px}
 .brand{display:flex;align-items:center;gap:12px;min-width:0}
 .brand-logo{
-  width:48px;height:48px;border-radius:50%;flex-shrink:0;
-  background:conic-gradient(from 200deg, var(--green) 0 33%, #fff 33% 66%, var(--red) 66% 100%);
-  display:grid;place-items:center;font-size:25px;
-  border:3px solid var(--ink);
-  box-shadow:3px 3px 0 var(--ink);
+  width:56px;height:56px;flex-shrink:0;
+  object-fit:contain;display:block;
+  filter:drop-shadow(2px 2px 0 rgba(20,20,22,.22));
 }
 .brand-text{line-height:1.05}
 .brand-name{font-family:var(--font-poster);font-size:1.3rem;letter-spacing:.02em}
@@ -947,6 +1072,133 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .mid-ticker .ticker-track{animation-duration:22s}
 .mid-ticker span{padding:0 24px}
 
+/* ═══════════ CARTA COMPLETA ═══════════ */
+.carta-sec{padding:92px 0 96px;position:relative;overflow:hidden}
+.carta-sec::before{
+  content:"";position:absolute;top:-60px;left:-150px;
+  width:400px;height:180px;background:var(--gold);
+  border-radius:var(--rough-2);transform:rotate(-16deg);opacity:.35;
+}
+.sec-title.dark{color:var(--ink)}
+.sec-title.dark .red{color:var(--red);text-shadow:2px 2px 0 var(--gold)}
+.sec-kicker.dark-k{color:var(--red-deep)}
+.sec-note.dark{color:var(--ink-soft)}
+.sec-note.dark strong{color:var(--red-deep)}
+
+.boards-grid{
+  display:grid;grid-template-columns:1.15fr 1fr;gap:34px;
+  margin-top:48px;position:relative;z-index:2;align-items:start;
+}
+.menu-board{
+  background:var(--ink);color:var(--paper);
+  padding:34px 30px 30px;position:relative;
+  box-shadow:var(--shadow-card);
+  border:1px solid rgba(0,0,0,.2);
+  transform:rotate(-.7deg);transition:transform .3s;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.014' numOctaves='3'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.menu-board:nth-child(2){transform:rotate(.7deg)}
+.menu-board:hover{transform:rotate(0) translateY(-5px)}
+.menu-board .tape{width:104px;height:28px;top:-13px;left:30px;transform:rotate(-4deg)}
+.board-title{
+  font-family:var(--font-poster);text-transform:uppercase;
+  font-size:1.9rem;letter-spacing:.02em;color:var(--gold);
+  line-height:1;
+}
+.board-legend{
+  font-family:var(--font-brush);font-size:.82rem;color:#b9b9c0;
+  margin:4px 0 20px;
+}
+.board-legend em{color:var(--paper);font-style:normal}
+.board-legend b{color:var(--gold);font-weight:400}
+.price-list{list-style:none;display:flex;flex-direction:column;gap:2px}
+.price-list li{display:flex;align-items:flex-end;gap:8px;padding:7px 0}
+.pl-name{
+  font-weight:700;font-size:1.02rem;flex-shrink:0;
+  display:flex;flex-direction:column;line-height:1.15;
+}
+.pl-name small{font-weight:500;font-size:.72rem;color:var(--gold);letter-spacing:.01em;margin-top:2px}
+.pl-dots{flex:1;border-bottom:2px dotted rgba(245,241,232,.3);transform:translateY(-4px);min-width:16px}
+.pl-prices{display:flex;align-items:baseline;gap:9px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.pl-main{font-family:var(--font-poster);font-size:1.32rem;color:#fff;letter-spacing:.02em}
+.pl-duo{
+  font-style:normal;font-size:.7rem;font-weight:700;
+  background:var(--red);color:#fff;padding:2px 8px;border-radius:100px;
+}
+.pl-orilla{font-weight:600;font-size:.68rem;color:var(--gold)}
+.board-foot{
+  margin-top:20px;padding-top:16px;
+  border-top:1px dashed rgba(245,241,232,.25);
+  font-size:1rem;color:var(--gold);text-align:center;
+}
+
+.esp-head{text-align:center;margin:74px auto 34px;max-width:640px;position:relative;z-index:2}
+.esp-title{
+  font-family:var(--font-poster);text-transform:uppercase;
+  font-size:clamp(1.9rem,4.5vw,3rem);line-height:1;color:var(--ink);
+}
+.esp-title .red{color:var(--red);text-shadow:2px 2px 0 var(--gold)}
+.esp-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+  gap:20px;position:relative;z-index:2;
+}
+.esp-card{
+  background:#fdfcf9;border:2px solid var(--ink);
+  box-shadow:5px 5px 0 rgba(20,20,22,.85);
+  padding:18px 20px 20px;
+  transition:transform .22s, box-shadow .22s;
+}
+.esp-card:nth-child(even){transform:rotate(-1deg)}
+.esp-card:nth-child(odd){transform:rotate(.8deg)}
+.esp-card:hover{transform:rotate(0) translateY(-4px);box-shadow:7px 7px 0 var(--red)}
+.esp-name{
+  font-family:var(--font-poster);text-transform:uppercase;
+  font-size:1.2rem;letter-spacing:.02em;color:var(--ink);
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  padding-bottom:10px;margin-bottom:11px;
+  border-bottom:2px solid var(--gold);
+}
+.esp-extra{
+  font-family:var(--font-body);font-size:.72rem;font-weight:800;
+  background:var(--red);color:#fff;padding:2px 9px;border-radius:100px;
+}
+.esp-ings{display:flex;flex-wrap:wrap;gap:6px}
+.esp-ings span{
+  font-size:.76rem;font-weight:600;color:var(--ink-soft);
+  background:var(--paper-2);border:1px solid rgba(20,20,22,.12);
+  padding:4px 10px;border-radius:100px;
+}
+
+.ing-panel{
+  margin-top:44px;position:relative;z-index:2;
+  background:var(--red);
+  border:3px solid var(--ink);
+  box-shadow:8px 8px 0 var(--ink);
+  padding:38px 32px;transform:rotate(-.5deg);
+}
+.ing-panel .tape{width:120px;height:30px;top:-15px;left:50%;transform:translateX(-50%) rotate(-2deg)}
+.ing-panel-in{text-align:center;color:#fff}
+.ing-panel h3{
+  font-family:var(--font-poster);text-transform:uppercase;
+  font-size:clamp(1.6rem,4vw,2.4rem);line-height:1;
+  text-shadow:3px 3px 0 var(--ink);
+}
+.ing-lead{margin:12px 0 22px;font-size:1.05rem;opacity:.96}
+.ing-lead strong{font-family:var(--font-poster);font-weight:400;letter-spacing:.04em;color:var(--gold);font-size:1.2em}
+.ing-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:9px;margin-bottom:28px}
+.ing-chips span{
+  font-weight:700;font-size:.86rem;color:var(--ink);
+  background:var(--paper);
+  border:2px solid var(--ink);
+  padding:7px 15px;border-radius:100px;
+  transition:transform .18s;
+}
+.ing-chips span:hover{transform:translateY(-3px) rotate(-2deg)}
+.ing-chips .ing-pastor{background:var(--gold);color:var(--ink)}
+.ing-cta{background:#22C55E;color:#fff;border-color:var(--ink);box-shadow:5px 5px 0 var(--ink)}
+.ing-cta:hover{transform:translate(-3px,-3px);box-shadow:8px 8px 0 var(--ink)}
+
 /* ═══════════ UBICACIÓN ═══════════ */
 .loc-sec{padding:96px 0}
 .loc-sec .sec-kicker{color:var(--red)}
@@ -1218,6 +1470,7 @@ footer h4{
   .hero-ctas,.hero-badges{justify-content:center}
   .hero-flyer{max-width:440px;margin-inline:auto}
   .loc-grid{grid-template-columns:1fr}
+  .boards-grid{grid-template-columns:1fr;gap:40px}
 }
 @media (max-width:860px){
   .nav-links{display:none}
@@ -1232,6 +1485,11 @@ footer h4{
   .combos-grid{gap:38px 20px}
   .cart-fab{right:14px;bottom:14px}
   .loc-btns .btn{width:100%}
+  .menu-board{padding:28px 20px 24px}
+  .pl-name{font-size:.94rem}
+  .pl-main{font-size:1.18rem}
+  .ing-panel{padding:30px 20px}
+  .ing-cta{width:100%}
 }
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}
