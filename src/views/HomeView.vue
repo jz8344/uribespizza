@@ -187,17 +187,32 @@ function toggleFormIng (name) {
   else if (form.ings.length < MAX_INGS) form.ings.push(name)
 }
 
+// Costo de extras: cada ingrediente +$10, Pastor +$25, especialidad según su extra
+const ING_EXTRA = 10
+const flavorExtra = computed(() => {
+  const e = ESPECIALIDADES.find((x) => x.name === form.flavor)
+  return e && e.extra ? e.extra : 0
+})
+const ingsExtra = computed(() =>
+  form.ings.reduce((s, ing) => s + (ing === 'Pastor' ? PASTOR_EXTRA : ING_EXTRA), 0)
+)
+const extrasTotal = computed(() => flavorExtra.value + ingsExtra.value)
+const orderTotal = computed(() => cartTotal.value + extrasTotal.value)
+
 function sendWhatsapp () {
   if (cartTotal.value === 0) return
   const lines = ["Hola Uribe's Pizza! 🍕 Quisiera pedir:", '']
   for (const item of cartEntries.value) {
     lines.push(`• ${item.qty}x ${item.name} (${money(item.price)} c/u) = ${money(item.price * item.qty)}`)
   }
-  lines.push('', `*Total: ${money(cartTotal.value)}*`)
+  if (form.flavor) lines.push('', `🍕 Especialidad: ${form.flavor}${flavorExtra.value ? ` (+${money(flavorExtra.value)})` : ''}`)
+  if (form.ings.length) {
+    const list = form.ings.map((ing) => `${ing} (+${money(ing === 'Pastor' ? PASTOR_EXTRA : ING_EXTRA)})`).join(', ')
+    lines.push(`🧀 Ingredientes: ${list}`)
+  }
+  lines.push('', `*Total: ${money(orderTotal.value)}*`)
   if (form.name) lines.push('', `👤 Nombre: ${form.name}`)
   if (form.addr) lines.push(`📍 Dirección: ${form.addr}`)
-  if (form.flavor) lines.push(`🍕 Especialidad: ${form.flavor}`)
-  if (form.ings.length) lines.push(`🧀 Ingredientes: ${form.ings.join(', ')}`)
   if (form.notes) lines.push(`📝 Notas: ${form.notes}`)
   lines.push('', '¡Gracias!')
   window.open(`https://wa.me/${WA_PHONE}?text=${encodeURIComponent(lines.join('\n'))}`, '_blank', 'noopener')
@@ -504,8 +519,8 @@ const MID_TICKER = [
       <div class="ing-panel reveal">
         <span class="tape"></span>
         <div class="ing-panel-in">
-          <h3>🧑‍🍳 Elige tus ingredientes</h3>
-          <p class="ing-lead"><strong>3 ingredientes</strong> por pizza — ¡sin costo extra! Combínalos a tu gusto.</p>
+          <h3>🧑‍🍳 Arma tu pizza</h3>
+          <p class="ing-lead">Elige <strong>hasta 3 ingredientes</strong> — +{{ money(ING_EXTRA) }} c/u. El Pastor +{{ money(PASTOR_EXTRA) }}.</p>
           <div class="ing-chips">
             <span v-for="ing in INGREDIENTES" :key="ing">{{ ing }}</span>
             <span class="ing-pastor">Pastor +{{ money(PASTOR_EXTRA) }}</span>
@@ -658,7 +673,7 @@ const MID_TICKER = [
         <label for="fFlavor">especialidad de pizza</label>
         <select id="fFlavor" v-model="form.flavor">
           <option value="">— Elegir especialidad (opcional) —</option>
-          <option v-for="e in ESPECIALIDADES" :key="e.name" :value="e.extra ? `${e.name} (+${money(e.extra)})` : e.name">
+          <option v-for="e in ESPECIALIDADES" :key="e.name" :value="e.name">
             {{ e.name }}{{ e.extra ? ` (+${money(e.extra)})` : '' }}
           </option>
         </select>
@@ -666,7 +681,7 @@ const MID_TICKER = [
       <div>
         <label>
           o arma tu pizza — ingredientes
-          <span class="ing-hint">({{ form.ings.length }}/{{ MAX_INGS }})</span>
+          <span class="ing-hint">({{ form.ings.length }}/{{ MAX_INGS }} · +{{ money(ING_EXTRA) }} c/u)</span>
         </label>
         <div class="ing-picker">
           <button v-for="ing in INGREDIENTES" :key="ing" type="button"
@@ -684,9 +699,12 @@ const MID_TICKER = [
       </div>
     </form>
     <div class="cart-foot">
+      <div v-if="extrasTotal > 0" class="cart-extra-row">
+        <span>Combos {{ money(cartTotal) }} <b>+ extras {{ money(extrasTotal) }}</b></span>
+      </div>
       <div class="cart-total-row">
         <span class="label">total del pedido</span>
-        <span class="amount">{{ money(cartTotal) }}</span>
+        <span class="amount">{{ money(orderTotal) }}</span>
       </div>
       <button class="btn-send-wa" :disabled="cartQty === 0" @click="sendWhatsapp">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.019-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
@@ -1488,6 +1506,8 @@ footer h4{
   background:var(--ink);
   border-top:3px solid var(--red);
 }
+.cart-extra-row{font-size:.82rem;color:#b9b9c0;margin-bottom:6px}
+.cart-extra-row b{color:var(--gold);font-weight:700}
 .cart-total-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px}
 .cart-total-row .label{font-family:var(--font-brush);color:#b9b9c0;font-size:.95rem}
 .cart-total-row .amount{font-family:var(--font-poster);font-size:2rem;color:var(--gold)}
