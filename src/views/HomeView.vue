@@ -216,6 +216,15 @@ const cartOpen = ref(false)
 function openCart () { cartOpen.value = true }
 function closeCart () { cartOpen.value = false }
 
+// Indicador de scroll: avisa cuando hay más productos abajo
+const cartItemsEl = ref(null)
+const cartCanScrollDown = ref(false)
+function updateCartScroll () {
+  const el = cartItemsEl.value
+  cartCanScrollDown.value = !!el && (el.scrollHeight - el.scrollTop - el.clientHeight > 8)
+}
+watch([() => cartLines.length, cartOpen], () => { nextTick(updateCartScroll) })
+
 const lightboxSrc = ref(null)
 function openLightbox (src) { lightboxSrc.value = src }
 function closeLightbox () { lightboxSrc.value = null }
@@ -700,7 +709,8 @@ const MID_TICKER = [
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
-    <div class="cart-items">
+    <div class="cart-scroll">
+    <div class="cart-items" ref="cartItemsEl" @scroll="updateCartScroll">
       <div v-if="cartQty === 0" class="cart-empty">
         <span class="big">🍕</span><span class="marker">tu pedido está vacío…</span><br>Agrega un combo desde el menú.
       </div>
@@ -723,6 +733,10 @@ const MID_TICKER = [
           <span>{{ l.qty }}</span>
           <button class="qty-btn" aria-label="Agregar uno" @click="changeQty(l.key, 1)">+</button>
         </div>
+      </div>
+    </div>
+      <div class="cart-fade" :class="{ show: cartCanScrollDown }" aria-hidden="true">
+        <span class="cart-fade-pill">▼ desliza para ver más</span>
       </div>
     </div>
     <form class="cart-form" autocomplete="on" @submit.prevent>
@@ -1571,7 +1585,24 @@ footer h4{
 }
 .cart-close:hover{background:var(--red)}
 .cart-close svg{width:18px;height:18px;stroke:#fff}
+.cart-scroll{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
 .cart-items{flex:1;overflow-y:auto;padding:18px 22px;display:flex;flex-direction:column;gap:12px}
+.cart-fade{
+  position:absolute;left:0;right:0;bottom:0;height:70px;
+  pointer-events:none;
+  background:linear-gradient(to top, var(--paper) 22%, rgba(245,241,232,0));
+  display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px;
+  opacity:0;transform:translateY(4px);transition:opacity .25s, transform .25s;
+}
+.cart-fade.show{opacity:1;transform:translateY(0)}
+.cart-fade-pill{
+  font-family:var(--font-brush);font-size:.82rem;
+  background:var(--ink);color:var(--gold);
+  padding:5px 15px;border-radius:100px;
+  box-shadow:0 5px 14px rgba(0,0,0,.3);
+  animation:fadeBob 1.5s ease-in-out infinite;
+}
+@keyframes fadeBob{0%,100%{transform:translateY(0)}50%{transform:translateY(3px)}}
 .cart-empty{text-align:center;color:var(--ink-soft);padding:40px 12px;font-size:.95rem}
 .cart-empty .big{font-size:3rem;display:block;margin-bottom:10px}
 .cart-empty .marker{color:var(--red-deep)}
