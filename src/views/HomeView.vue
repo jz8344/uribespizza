@@ -177,7 +177,15 @@ function showToast (msg) {
 /* ══════════════════════════════════════════════
    FORMULARIO + WHATSAPP
 ══════════════════════════════════════════════ */
-const form = reactive({ name: '', addr: '', flavor: '', notes: '' })
+const form = reactive({ name: '', addr: '', flavor: '', ings: [], notes: '' })
+
+// Selección de ingredientes personalizados (máximo 3 por pizza)
+const MAX_INGS = 3
+function toggleFormIng (name) {
+  const i = form.ings.indexOf(name)
+  if (i >= 0) form.ings.splice(i, 1)
+  else if (form.ings.length < MAX_INGS) form.ings.push(name)
+}
 
 function sendWhatsapp () {
   if (cartTotal.value === 0) return
@@ -189,6 +197,7 @@ function sendWhatsapp () {
   if (form.name) lines.push('', `👤 Nombre: ${form.name}`)
   if (form.addr) lines.push(`📍 Dirección: ${form.addr}`)
   if (form.flavor) lines.push(`🍕 Especialidad: ${form.flavor}`)
+  if (form.ings.length) lines.push(`🧀 Ingredientes: ${form.ings.join(', ')}`)
   if (form.notes) lines.push(`📝 Notas: ${form.notes}`)
   lines.push('', '¡Gracias!')
   window.open(`https://wa.me/${WA_PHONE}?text=${encodeURIComponent(lines.join('\n'))}`, '_blank', 'noopener')
@@ -648,14 +657,26 @@ const MID_TICKER = [
       <div>
         <label for="fFlavor">especialidad de pizza</label>
         <select id="fFlavor" v-model="form.flavor">
-          <option value="">— Elegir sabor (opcional) —</option>
-          <option>Peperoni Clásico</option>
-          <option>Hawaiana (Jamón y Piña)</option>
-          <option>Mexicana (Chorizo y Jalapeño)</option>
-          <option>Carnes Frías</option>
-          <option>Mitad y Mitad</option>
-          <option>Especial Uribe's (Combinada)</option>
+          <option value="">— Elegir especialidad (opcional) —</option>
+          <option v-for="e in ESPECIALIDADES" :key="e.name" :value="e.extra ? `${e.name} (+${money(e.extra)})` : e.name">
+            {{ e.name }}{{ e.extra ? ` (+${money(e.extra)})` : '' }}
+          </option>
         </select>
+      </div>
+      <div>
+        <label>
+          o arma tu pizza — ingredientes
+          <span class="ing-hint">({{ form.ings.length }}/{{ MAX_INGS }})</span>
+        </label>
+        <div class="ing-picker">
+          <button v-for="ing in INGREDIENTES" :key="ing" type="button"
+            class="ing-pick" :class="{ on: form.ings.includes(ing) }"
+            :disabled="!form.ings.includes(ing) && form.ings.length >= MAX_INGS"
+            @click="toggleFormIng(ing)">{{ ing }}</button>
+          <button type="button" class="ing-pick pastor" :class="{ on: form.ings.includes('Pastor') }"
+            :disabled="!form.ings.includes('Pastor') && form.ings.length >= MAX_INGS"
+            @click="toggleFormIng('Pastor')">Pastor +{{ money(PASTOR_EXTRA) }}</button>
+        </div>
       </div>
       <div>
         <label for="fNotes">notas del pedido</label>
@@ -1449,6 +1470,19 @@ footer h4{
 }
 .cart-form input:focus,.cart-form textarea:focus,.cart-form select:focus{box-shadow:3px 3px 0 var(--red)}
 .cart-form ::placeholder{color:#9a9aa2}
+.ing-hint{font-family:var(--font-body);color:var(--red-deep);font-weight:700;font-size:.72rem}
+.ing-picker{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.ing-pick{
+  font-size:.74rem;font-weight:700;
+  background:#fdfcf9;color:var(--ink-soft);
+  border:2px solid var(--ink);
+  padding:6px 11px;border-radius:100px;
+  transition:transform .15s, background .15s, color .15s;
+}
+.ing-pick:hover:not(:disabled){transform:translateY(-2px)}
+.ing-pick.on{background:var(--red);color:#fff;border-color:var(--red)}
+.ing-pick.pastor.on{background:var(--gold);color:var(--ink);border-color:var(--ink)}
+.ing-pick:disabled{opacity:.35;cursor:not-allowed}
 .cart-foot{
   padding:16px 22px 22px;
   background:var(--ink);
